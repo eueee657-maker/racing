@@ -1,0 +1,95 @@
+function myFunction() {
+  /**
+ * 웹 앱의 메인 페이지를 서비스합니다.
+ * @param {Object} e - 이벤트 객체 (Apps Script에 의해 자동 전달됨)
+ * @return {GoogleAppsScript.HTML.HtmlOutput}
+ */
+function doGet(e) {
+  // HTML 파일을 템플릿으로 로드하고 앱 설정을 지정합니다.
+  return HtmlService.createTemplateFromFile('index').evaluate()
+      .setTitle('경마 베팅 시뮬레이션')
+      .setFaviconUrl('https://placehold.co/16x16/000000/ffffff?text=🏇')
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
+
+/**
+ * 초기 경주마 데이터와 배당률을 반환합니다.
+ * 경주마를 일본의 유명 우승마 8마리로 설정했습니다.
+ * @return {Array<Object>} 경주마 정보 배열
+ */
+function getInitialData() {
+  // 일본의 전설적인 G1 우승마 목록 및 배당률 설정 (총 8마리)
+  const horses = [
+    // 낮은 배당률 (유력 우승마)
+    { id: 1, name: "딥 임팩트", odds: 2.0 },        // Deep Impact (트리플 크라운, 전설적인 명마)
+    { id: 2, name: "아몬드 아이", odds: 3.0 },      // Almond Eye (G1 최다승 기록 보유)
+    { id: 3, name: "심볼리 루돌프", odds: 4.5 },    // Symboli Rudolf (최초 무패 트리플 크라운)
+    { id: 4, name: "오르페브르", odds: 6.0 },        // Orfevre (트리플 크라운, 아리마 기념 2회)
+    
+    // 중간 배당률
+    { id: 5, name: "젠틸돈나", odds: 10.0 },       // Gentildonna (재팬 컵 2회 우승)
+    { id: 6, name: "로드 카날로아", odds: 15.0 },   // Lord Kanaloa (단거리 챔피언)
+    
+    // 높은 배당률 (대이변 가능성)
+    { id: 7, name: "골드 쉽", odds: 20.0 },         // Gold Ship (G1 6승, 예측 불가능한 명마)
+    { id: 8, name: "이퀴녹스", odds: 25.0 }          // Equinox (최근 세계 랭킹 1위, 고배당마)
+  ];
+  return horses;
+}
+
+/**
+ * 경주를 시뮬레이션하고 결과를 계산합니다.
+ * @param {object} betData - { horseId: number, betAmount: number } 베팅 데이터
+ * @return {object} - { winnerId: number, winnerName: string, winnerOdds: number, resultAmount: number, isWin: boolean, error: string? } 결과 객체
+ */
+function simulateRace(betData) {
+  const horses = getInitialData();
+  const selectedHorse = horses.find(h => h.id === betData.horseId);
+  
+  if (!selectedHorse || betData.betAmount <= 0) {
+    return { error: "유효하지 않은 베팅입니다." };
+  }
+
+  // --- 시뮬레이션: 배당률에 반비례하는 확률로 승자 결정 ---
+  // 낮은 배당률(유력 우승마)일수록 당첨 확률이 높도록 가중치를 적용합니다.
+  const totalInverseOdds = horses.reduce((sum, h) => sum + (1 / h.odds), 0);
+  
+  let random = Math.random() * totalInverseOdds;
+  let winner = null;
+  
+  for (const horse of horses) {
+    const inverseOdds = 1 / horse.odds;
+    if (random < inverseOdds) {
+      winner = horse;
+      break;
+    }
+    random -= inverseOdds;
+  }
+  
+  // 부동소수점 문제로 승자가 결정되지 않을 경우 마지막 말을 승자로 지정 (안전장치)
+  if (!winner) {
+    winner = horses[horses.length - 1];
+  }
+
+  // --- 결과 계산 ---
+  const isWin = (winner.id === selectedHorse.id);
+  let resultAmount = 0; // 순수 손익 (베팅액 제외한 이익 또는 손실)
+
+  if (isWin) {
+    // 승리: (베팅액 * 배당률) - 베팅액 = 순수 이익
+    resultAmount = (betData.betAmount * selectedHorse.odds) - betData.betAmount;
+  } else {
+    // 패배: 베팅액만큼 손해
+    resultAmount = -betData.betAmount;
+  }
+
+  return {
+    winnerId: winner.id,
+    winnerName: winner.name,
+    winnerOdds: winner.odds,
+    isWin: isWin,
+    resultAmount: resultAmount // 순수 손익 금액
+  };
+}
+
+}
